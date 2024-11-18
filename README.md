@@ -9,6 +9,7 @@
 ```bash
 git clone git@github.com:Sergeydigl3/zapret-discord-youtube-linux.git
 cd zapret-discord-youtube-linux
+sudo chmod +x nfqws
 sudo bash main_script.sh
 ```
 1. Скрипт спросит у вас нужно ли обновление (первый раз нужно нажать да). Потом необязательно
