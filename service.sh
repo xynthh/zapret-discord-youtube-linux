@@ -4,9 +4,9 @@
 SERVICE_NAME="zapret_discord_youtube"
 SERVICE_FILE="/etc/systemd/system/$SERVICE_NAME.service"
 HOME_DIR_PATH="$(dirname "$0")"
-MAIN_SCRIPT_PATH="$(dirname "$0")/main_script.sh"  # Путь к основному скрипту
-CONF_FILE="$(dirname "$0")/conf.env"  # Путь к файлу конфигурации
-STOP_SCRIPT="$(dirname "$0")/stop_and_clean_nft.sh"  # Путь к скрипту остановки и очистки nftables
+MAIN_SCRIPT_PATH="$(dirname "$0")/main_script.sh"   # Путь к основному скрипту
+CONF_FILE="$(dirname "$0")/conf.env"                # Путь к файлу конфигурации
+STOP_SCRIPT="$(dirname "$0")/stop_and_clean_nft.sh" # Путь к скрипту остановки и очистки nftables
 
 # Функция для проверки существования conf.env и необходимых полей
 check_conf_file() {
@@ -72,7 +72,7 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=
+WorkingDirectory=$absolute_homedir_path
 ExecStart=sudo /bin/bash $absolute_main_script_path -nointeractive >> /var/log/$SERVICE_NAME.log 2>&1
 ExecStop=sudo /bin/bash $absolute_stop_script_path
 ExecStopPost=/bin/echo "Сервис завершён"
@@ -121,34 +121,34 @@ show_menu() {
     local status=$?
 
     case $status in
-        1)
-            echo "1. Установить и запустить сервис"
-            read -p "Выберите действие: " choice
-            if [ "$choice" -eq 1 ]; then
-                install_service
-            fi
-            ;;
-        2)
-            echo "1. Удалить сервис"
-            echo "2. Остановить сервис"
-            read -p "Выберите действие: " choice
-            case $choice in
-                1) remove_service ;;
-                2) stop_service ;;
-            esac
-            ;;
-        3)
-            echo "1. Удалить сервис"
-            echo "2. Запустить сервис"
-            read -p "Выберите действие: " choice
-            case $choice in
-                1) remove_service ;;
-                2) start_service ;;
-            esac
-            ;;
-        *)
-            echo "Неправильный выбор."
-            ;;
+    1)
+        echo "1. Установить и запустить сервис"
+        read -p "Выберите действие: " choice
+        if [ "$choice" -eq 1 ]; then
+            install_service
+        fi
+        ;;
+    2)
+        echo "1. Удалить сервис"
+        echo "2. Остановить сервис"
+        read -p "Выберите действие: " choice
+        case $choice in
+        1) remove_service ;;
+        2) stop_service ;;
+        esac
+        ;;
+    3)
+        echo "1. Удалить сервис"
+        echo "2. Запустить сервис"
+        read -p "Выберите действие: " choice
+        case $choice in
+        1) remove_service ;;
+        2) start_service ;;
+        esac
+        ;;
+    *)
+        echo "Неправильный выбор."
+        ;;
     esac
 }
 

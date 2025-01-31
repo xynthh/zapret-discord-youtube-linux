@@ -73,12 +73,18 @@ setup_repository() {
             log "Обновление репозитория..."
             rm -rf "$REPO_DIR"
             git clone "$REPO_URL" "$REPO_DIR" || handle_error "Ошибка при клонировании репозитория"
+            # rename_bat.sh
+            chmod +x "$BASE_DIR/rename_bat.sh"
+            "$BASE_DIR/rename_bat.sh" || handle_error "Ошибка при переименовании файлов"
         else
             log "Использование существующей версии репозитория."
         fi
     else
         log "Клонирование репозитория..."
         git clone "$REPO_URL" "$REPO_DIR" || handle_error "Ошибка при клонировании репозитория"
+        # rename_bat.sh
+        chmod +x "$BASE_DIR/rename_bat.sh"
+        "$BASE_DIR/rename_bat.sh" || handle_error "Ошибка при переименовании файлов"
     fi
 }
 

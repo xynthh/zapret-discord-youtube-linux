@@ -25,10 +25,10 @@ clear_firewall_rules() {
         if sudo nft list chain $TABLE_NAME $CHAIN_NAME >/dev/null 2>&1; then
             # Получаем все handle значений правил с меткой, добавленных скриптом
             handles=$(sudo nft -a list chain $TABLE_NAME $CHAIN_NAME | grep "$RULE_COMMENT" | awk '{print $NF}')
-            
+
             # Удаление каждого правила по handle значению
             for handle in $handles; do
-                sudo nft delete rule $TABLE_NAME $CHAIN_NAME handle $handle || \
+                sudo nft delete rule $TABLE_NAME $CHAIN_NAME handle $handle ||
                     log "Не удалось удалить правило с handle $handle"
             done
 
@@ -47,8 +47,8 @@ clear_firewall_rules() {
 
 # Основной процесс
 stop_and_clear_firewall() {
-    stop_nfqws_processes   # Останавливаем процессы nfqws
-    clear_firewall_rules   # Чистим правила nftables
+    stop_nfqws_processes # Останавливаем процессы nfqws
+    clear_firewall_rules # Чистим правила nftables
 }
 
 # Запуск
