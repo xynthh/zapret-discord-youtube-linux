@@ -14,7 +14,7 @@ check_conf_file() {
         echo "Ошибка: Файл конфигурации conf.env не найден."
         return 1
     fi
-
+    
     # Проверяем наличие необходимых полей
     local required_fields=("interface" "auto_update" "strategy")
     for field in "${required_fields[@]}"; do
@@ -41,7 +41,7 @@ check_service_status() {
         echo "Статус: Сервис не установлен."
         return 1
     fi
-
+    
     if systemctl is-active --quiet "$SERVICE_NAME"; then
         echo "Статус: Сервис установлен и активен."
         return 2
@@ -58,21 +58,23 @@ install_service() {
         echo "Установка прервана из-за ошибки в conf.env."
         return
     fi
-
+    
     # Получение абсолютного пути к основному и скрипту остановки
     local absolute_homedir_path="$(realpath "$HOME_DIR_PATH")"
     local absolute_main_script_path="$(realpath "$MAIN_SCRIPT_PATH")"
     local absolute_stop_script_path="$(realpath "$STOP_SCRIPT")"
-
+    
     echo "Создание systemd сервиса для автозагрузки..."
     sudo bash -c "cat > $SERVICE_FILE" <<EOF
 [Unit]
 Description=Custom Script Service
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
 WorkingDirectory=$absolute_homedir_path
+ExecStartPre=/bin/sleep 10
 ExecStart=sudo /bin/bash $absolute_main_script_path -nointeractive >> /var/log/$SERVICE_NAME.log 2>&1
 ExecStop=sudo /bin/bash $absolute_stop_script_path
 ExecStopPost=/bin/echo "Сервис завершён"
@@ -119,35 +121,35 @@ stop_service() {
 show_menu() {
     check_service_status
     local status=$?
-
+    
     case $status in
-    1)
-        echo "1. Установить и запустить сервис"
-        read -p "Выберите действие: " choice
-        if [ "$choice" -eq 1 ]; then
-            install_service
-        fi
+        1)
+            echo "1. Установить и запустить сервис"
+            read -p "Выберите действие: " choice
+            if [ "$choice" -eq 1 ]; then
+                install_service
+            fi
         ;;
-    2)
-        echo "1. Удалить сервис"
-        echo "2. Остановить сервис"
-        read -p "Выберите действие: " choice
-        case $choice in
-        1) remove_service ;;
-        2) stop_service ;;
-        esac
+        2)
+            echo "1. Удалить сервис"
+            echo "2. Остановить сервис"
+            read -p "Выберите действие: " choice
+            case $choice in
+                1) remove_service ;;
+                2) stop_service ;;
+            esac
         ;;
-    3)
-        echo "1. Удалить сервис"
-        echo "2. Запустить сервис"
-        read -p "Выберите действие: " choice
-        case $choice in
-        1) remove_service ;;
-        2) start_service ;;
-        esac
+        3)
+            echo "1. Удалить сервис"
+            echo "2. Запустить сервис"
+            read -p "Выберите действие: " choice
+            case $choice in
+                1) remove_service ;;
+                2) start_service ;;
+            esac
         ;;
-    *)
-        echo "Неправильный выбор."
+        *)
+            echo "Неправильный выбор."
         ;;
     esac
 }
