@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Константы
 TABLE_NAME="inet zapretunix"

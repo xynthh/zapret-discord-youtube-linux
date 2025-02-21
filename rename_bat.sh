@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Директория для обработки
 TARGET_DIR="zapret-latest"
