@@ -138,10 +138,9 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=$absolute_homedir_path
-ExecStartPre=/bin/sleep 10
-ExecStart=sudo /bin/bash $absolute_main_script_path -nointeractive >> /var/log/$SERVICE_NAME.log 2>&1
-ExecStop=sudo /bin/bash $absolute_stop_script_path
-ExecStopPost=/bin/echo "Сервис завершён"
+ExecStart=sudo /usr/bin/env bash $absolute_main_script_path -nointeractive >> /var/log/$SERVICE_NAME.log 2>&1
+ExecStop=sudo /usr/bin/env bash $absolute_stop_script_path
+ExecStopPost=/usr/bin/env echo "Сервис завершён"
 PIDFile=/run/$SERVICE_NAME.pid
 
 [Install]

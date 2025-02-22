@@ -14,7 +14,7 @@ NOINTERACTIVE=false
 
 sudo $STOP_SCRIPT
 _term() {
-    sudo /bin/bash $STOP_SCRIPT
+    sudo /usr/bin/env bash $STOP_SCRIPT
 }
 
 # Функция для логирования
