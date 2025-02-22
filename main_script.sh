@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Константы
 BASE_DIR="$(realpath "$(dirname "$0")")"

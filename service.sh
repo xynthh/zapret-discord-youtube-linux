@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Константы
 SERVICE_NAME="zapret_discord_youtube"
