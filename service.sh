@@ -138,8 +138,9 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=$absolute_homedir_path
-ExecStart=sudo /usr/bin/env bash $absolute_main_script_path -nointeractive >> /var/log/$SERVICE_NAME.log 2>&1
-ExecStop=sudo /usr/bin/env bash $absolute_stop_script_path
+User=root
+ExecStart=/usr/bin/env bash $absolute_main_script_path -nointeractive
+ExecStop=/usr/bin/env bash $absolute_stop_script_path
 ExecStopPost=/usr/bin/env echo "Сервис завершён"
 PIDFile=/run/$SERVICE_NAME.pid
 
@@ -167,7 +168,7 @@ start_service() {
     echo "Запуск сервиса..."
     sudo systemctl start "$SERVICE_NAME"
     echo "Сервис запущен."
-    sleep 5
+    sleep 3
     check_nfqws_status
 }
 
