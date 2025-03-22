@@ -200,7 +200,7 @@ start_nfqws() {
     cd "$REPO_DIR" || handle_error "Не удалось перейти в директорию $REPO_DIR"
     for queue_num in "${!nfqws_params[@]}"; do
         debug_log "Запуск nfqws с параметрами: $NFQWS_PATH --daemon --qnum=$queue_num ${nfqws_params[$queue_num]}"
-        eval "sudo $NFQWS_PATH --qnum=$queue_num ${nfqws_params[$queue_num]} &" ||
+        eval "sudo $NFQWS_PATH --daemon --qnum=$queue_num ${nfqws_params[$queue_num]}" ||
         handle_error "Ошибка при запуске nfqws для очереди $queue_num"
     done
 }
