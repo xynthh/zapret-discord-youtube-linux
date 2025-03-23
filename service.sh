@@ -1,137 +1,134 @@
 #!/usr/bin/env bash
 
+# Подключаем общие функции
+source "$(dirname "$0")/common.sh"
+
 # Константы
 SERVICE_NAME="zapret_discord_youtube"
 SERVICE_FILE="/etc/systemd/system/$SERVICE_NAME.service"
 HOME_DIR_PATH="$(dirname "$0")"
-MAIN_SCRIPT_PATH="$(dirname "$0")/main_script.sh"   # Путь к основному скрипту
-CONF_FILE="$(dirname "$0")/conf.env"                # Путь к файлу конфигурации
-STOP_SCRIPT="$(dirname "$0")/stop_and_clean_nft.sh" # Путь к скрипту остановки и очистки nftables
+MAIN_SCRIPT_PATH="$HOME_DIR_PATH/main_script.sh"
+CONF_FILE="$HOME_DIR_PATH/conf.env"
+STOP_SCRIPT="$HOME_DIR_PATH/stop_and_clean_nft.sh"
+REPO_DIR="$HOME_DIR_PATH/zapret-latest"
 
-# Функция для проверки существования conf.env и обязательных непустых полей
+# Проверка прав суперпользователя
+check_root
+
+# Функция проверки существования и полноты конфигурационного файла
 check_conf_file() {
-    if [[ ! -f "$CONF_FILE" ]]; then
+    if [ ! -f "$CONF_FILE" ]; then
         return 1
     fi
-    
-    local required_fields=("interface" "auto_update" "strategy")
-    for field in "${required_fields[@]}"; do
-        # Ищем строку вида field=Значение, где значение не пустое
-        if ! grep -q "^${field}=[^[:space:]]" "$CONF_FILE"; then
-            return 1
-        fi
-    done
+    source "$CONF_FILE"
+    if [ -z "$interface" ] || [ -z "$auto_update" ] || [ -z "$strategy" ]; then
+        return 1
+    fi
+    if ! ip link show "$interface" &>/dev/null; then
+        log "Предупреждение: Интерфейс '$interface' не существует."
+        return 1
+    fi
+    if [ ! -f "$REPO_DIR/$strategy" ]; then
+        log "Предупреждение: Файл стратегии '$strategy' не найден в '$REPO_DIR'."
+        return 1
+    fi
     return 0
 }
 
-# Функция для интерактивного создания файла конфигурации conf.env
+# Функция создания или обновления конфигурационного файла
 create_conf_file() {
-    echo "Конфигурация отсутствует или неполная. Создаем новый конфиг."
-    
-    # 1. Выбор интерфейса
+    log "Создание/обновление файла конфигурации '$CONF_FILE'..."
     local interfaces=($(ls /sys/class/net))
-    echo "Доступные сетевые интерфейсы:"
-    local i=1
-    for iface in "${interfaces[@]}"; do
-        echo "  $i) $iface"
-        ((i++))
+    if [ ${#interfaces[@]} -eq 0 ]; then
+        handle_error "Не найдены сетевые интерфейсы."
+    fi
+    echo "Доступные интерфейсы:"
+    for i in "${!interfaces[@]}"; do
+        echo "  $((i+1))) ${interfaces[i]}"
     done
     read -p "Выберите номер интерфейса: " iface_choice
+    if ! [[ "$iface_choice" =~ ^[0-9]+$ ]] || [ "$iface_choice" -lt 1 ] || [ "$iface_choice" -gt "${#interfaces[@]}" ]; then
+        handle_error "Неверный выбор интерфейса."
+    fi
     local chosen_interface="${interfaces[$((iface_choice-1))]}"
     
-    # 2. Авто-обновление
-    read -p "Включить авто-обновление? (true/false) [false]: " auto_update_choice
-    if [[ "$auto_update_choice" != "true" ]]; then
-        auto_update_choice="false"
-    fi
+    read -p "Включить автообновление? (true/false) [false]: " auto_update_choice
+    [ "$auto_update_choice" != "true" ] && auto_update_choice="false"
     
-    # 3. Выбор стратегии
     local strategy_choice=""
-    local repo_dir="$HOME_DIR_PATH/zapret-latest"
-    if [[ -d "$repo_dir" ]]; then
-        # Ищем .bat файлы, содержащие "general" или "discord", в папке репозитория (только в корне)
-        mapfile -t bat_files < <(find "$repo_dir" -maxdepth 1 -type f -name "*general*.bat" -o -name "*discord*.bat")
+    if [ -d "$REPO_DIR" ]; then
+        local bat_files=($(find "$REPO_DIR" -maxdepth 1 -type f -name "*general*.bat" -o -name "*discord*.bat"))
         if [ ${#bat_files[@]} -gt 0 ]; then
-            echo "Доступные стратегии (файлы .bat):"
-            i=1
-            for bat in "${bat_files[@]}"; do
-                echo "  $i) $(basename "$bat")"
-                ((i++))
+            echo "Доступные стратегии:"
+            for i in "${!bat_files[@]}"; do
+                echo "  $((i+1))) $(basename "${bat_files[i]}")"
             done
             read -p "Выберите номер стратегии: " bat_choice
-            strategy_choice="$(basename "${bat_files[$((bat_choice-1))]}")"
-        else
-            read -p "Файлы .bat с 'general' или 'discord' не найдены. Введите название стратегии вручную: " strategy_choice
+            if [[ "$bat_choice" =~ ^[0-9]+$ ]] && [ "$bat_choice" -ge 1 ] && [ "$bat_choice" -le "${#bat_files[@]}" ]; then
+                strategy_choice="$(basename "${bat_files[$((bat_choice-1))]}")"
+            else
+                handle_error "Неверный выбор стратегии."
+            fi
         fi
-    else
-        read -p "Папка репозитория не найдена. Введите название стратегии вручную: " strategy_choice
+    fi
+    if [ -z "$strategy_choice" ]; then
+        read -p "Введите имя файла стратегии вручную: " strategy_choice
+        if [ ! -f "$REPO_DIR/$strategy_choice" ]; then
+            handle_error "Файл стратегии '$strategy_choice' не найден в '$REPO_DIR'."
+        fi
     fi
     
-    
-    # Записываем полученные значения в conf.env
-    cat <<EOF > "$CONF_FILE"
-interface=$chosen_interface
-auto_update=$auto_update_choice
-strategy=$strategy_choice
-EOF
-    echo "Конфигурация записана в $CONF_FILE."
+    # Запись конфигурации в файл
+    echo "interface=$chosen_interface" > "$CONF_FILE"
+    echo "auto_update=$auto_update_choice" >> "$CONF_FILE"
+    echo "strategy=$strategy_choice" >> "$CONF_FILE"
+    log "Конфигурация сохранена в '$CONF_FILE'."
 }
 
-# Функция для проверки статуса процесса nfqws
+# Функция проверки статуса nfqws
 check_nfqws_status() {
     if pgrep -f "nfqws" >/dev/null; then
-        echo "Демоны nfqws запущены."
+        log "Процессы nfqws запущены."
     else
-        echo "Демоны nfqws не запущены."
+        log "Процессы nfqws не запущены."
     fi
 }
 
-# Функция для проверки статуса сервиса
+# Функция проверки статуса сервиса
 check_service_status() {
     if ! systemctl list-unit-files | grep -q "$SERVICE_NAME.service"; then
-        echo "Статус: Сервис не установлен."
+        log "Статус: Сервис не установлен."
         return 1
-    fi
-    
-    if systemctl is-active --quiet "$SERVICE_NAME"; then
-        echo "Статус: Сервис установлен и активен."
+        elif systemctl is-active --quiet "$SERVICE_NAME"; then
+        log "Статус: Сервис установлен и активен."
         return 2
     else
-        echo "Статус: Сервис установлен, но не активен."
+        log "Статус: Сервис установлен, но не активен."
         return 3
     fi
 }
 
-# Функция для установки сервиса
+# Функция установки сервиса
 install_service() {
-    # Если конфиг отсутствует или неполный — создаём его интерактивно
     if ! check_conf_file; then
-        read -p "Конфигурация отсутствует или неполная. Создать конфигурацию сейчас? (y/n): " answer
-        if [[ $answer =~ ^[Yy]$ ]]; then
+        read -p "Конфигурация отсутствует или неполна. Создать сейчас? (y/n): " answer
+        if [[ "$answer" =~ ^[Yy]$ ]]; then
             create_conf_file
         else
-            echo "Установка отменена."
+            log "Установка отменена."
             return
         fi
-        # Перепроверяем конфигурацию
         if ! check_conf_file; then
-            echo "Файл конфигурации все еще некорректен. Установка отменена."
-            return
+            handle_error "Конфигурация всё ещё некорректна. Установка отменена."
         fi
     fi
-    
-    # Получение абсолютного пути к основному скрипту и скрипту остановки
-    local absolute_homedir_path
-    absolute_homedir_path="$(realpath "$HOME_DIR_PATH")"
-    local absolute_main_script_path
-    absolute_main_script_path="$(realpath "$MAIN_SCRIPT_PATH")"
-    local absolute_stop_script_path
-    absolute_stop_script_path="$(realpath "$STOP_SCRIPT")"
-    
-    echo "Создание systemd сервиса для автозагрузки..."
+    local absolute_homedir_path="$(realpath "$HOME_DIR_PATH")"
+    local absolute_main_script_path="$(realpath "$MAIN_SCRIPT_PATH")"
+    local absolute_stop_script_path="$(realpath "$STOP_SCRIPT")"
+    log "Создание systemd-сервиса..."
     sudo bash -c "cat > $SERVICE_FILE" <<EOF
 [Unit]
-Description=Custom Script Service
+Description=Zapret Service
 After=network-online.target
 Wants=network-online.target
 
@@ -147,75 +144,92 @@ PIDFile=/run/$SERVICE_NAME.pid
 [Install]
 WantedBy=multi-user.target
 EOF
-    sudo systemctl daemon-reload
-    sudo systemctl enable "$SERVICE_NAME"
-    sudo systemctl start "$SERVICE_NAME"
-    echo "Сервис успешно установлен и запущен."
-}
-
-# Функция для удаления сервиса
-remove_service() {
-    echo "Удаление сервиса..."
-    sudo systemctl stop "$SERVICE_NAME"
-    sudo systemctl disable "$SERVICE_NAME"
-    sudo rm -f "$SERVICE_FILE"
-    sudo systemctl daemon-reload
-    echo "Сервис удален."
-}
-
-# Функция для запуска сервиса
-start_service() {
-    echo "Запуск сервиса..."
-    sudo systemctl start "$SERVICE_NAME"
-    echo "Сервис запущен."
-    sleep 3
+    sudo systemctl daemon-reload || handle_error "Не удалось обновить конфигурацию systemd."
+    sudo systemctl enable "$SERVICE_NAME" || handle_error "Не удалось включить сервис."
+    sudo systemctl start "$SERVICE_NAME" || handle_error "Не удалось запустить сервис."
+    log "Сервис успешно установлен и запущен."
     check_nfqws_status
 }
 
-# Функция для остановки сервиса
-stop_service() {
-    echo "Остановка сервиса..."
-    sudo systemctl stop "$SERVICE_NAME"
-    echo "Сервис остановлен."
-    # Вызов скрипта для остановки и очистки nftables
-    $STOP_SCRIPT
+# Функция удаления сервиса
+uninstall_service() {
+    log "Удаление сервиса..."
+    sudo systemctl stop "$SERVICE_NAME" || log "Сервис уже остановлен или не существует."
+    sudo systemctl disable "$SERVICE_NAME" || log "Сервис уже отключен или не существует."
+    sudo rm -f "$SERVICE_FILE"
+    sudo systemctl daemon-reload || log "Не удалось обновить конфигурацию systemd."
+    log "Сервис удален."
 }
 
-# Основное меню управления
+# Функция запуска сервиса
+start_service() {
+    log "Запуск сервиса..."
+    sudo systemctl start "$SERVICE_NAME" || handle_error "Не удалось запустить сервис."
+    log "Сервис запущен."
+    sleep 2
+    check_nfqws_status
+}
+
+# Функция остановки сервиса
+stop_service() {
+    log "Остановка сервиса..."
+    sudo systemctl stop "$SERVICE_NAME" || log "Сервис уже остановлен."
+    log "Сервис остановлен."
+    check_nfqws_status
+}
+
+# Функция перезапуска сервиса
+restart_service() {
+    log "Перезапуск сервиса..."
+    sudo systemctl restart "$SERVICE_NAME" || handle_error "Не удалось перезапустить сервис."
+    log "Сервис перезапущен."
+    sleep 2
+    check_nfqws_status
+}
+
+# Основное меню управления с динамическим отображением опций
 show_menu() {
     check_service_status
     local status=$?
+    local options=()
+    local actions=()
     
     case $status in
-        1)
-            echo "1. Установить и запустить сервис"
-            read -p "Выберите действие: " choice
-            if [ "$choice" -eq 1 ]; then
-                install_service
-            fi
+        1) # Сервис не установлен
+            options+=("1) Установить и запустить сервис")
+            options+=("2) Создать/пересоздать конфигурацию")
+            options+=("3) Выйти")
+            actions=("install_service" "create_conf_file" "exit 0")
         ;;
-        2)
-            echo "1. Удалить сервис"
-            echo "2. Остановить сервис"
-            read -p "Выберите действие: " choice
-            case $choice in
-                1) remove_service ;;
-                2) stop_service ;;
-            esac
+        2) # Сервис установлен и активен
+            options+=("1) Остановить сервис")
+            options+=("2) Перезапустить сервис")
+            options+=("3) Удалить сервис")
+            options+=("4) Создать/пересоздать конфигурацию")
+            options+=("5) Выйти")
+            actions=("stop_service" "restart_service" "uninstall_service" "create_conf_file" "exit 0")
         ;;
-        3)
-            echo "1. Удалить сервис"
-            echo "2. Запустить сервис"
-            read -p "Выберите действие: " choice
-            case $choice in
-                1) remove_service ;;
-                2) start_service ;;
-            esac
-        ;;
-        *)
-            echo "Неправильный выбор."
+        3) # Сервис установлен, но не активен
+            options+=("1) Запустить сервис")
+            options+=("2) Удалить сервис")
+            options+=("3) Создать/пересоздать конфигурацию")
+            options+=("4) Выйти")
+            actions=("start_service" "uninstall_service" "create_conf_file" "exit 0")
         ;;
     esac
+    
+    # Вывод доступных опций
+    for opt in "${options[@]}"; do
+        echo "$opt"
+    done
+    
+    # Чтение выбора пользователя
+    read -p "Выберите действие: " choice
+    if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#actions[@]}" ]; then
+        eval "${actions[$((choice-1))]}"
+    else
+        log "Неверный выбор."
+    fi
 }
 
 # Запуск меню
